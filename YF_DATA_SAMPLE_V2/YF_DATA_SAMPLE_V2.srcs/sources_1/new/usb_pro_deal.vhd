@@ -66,6 +66,8 @@ entity usb_pro_deal is
     commom_sig        :out std_logic;
     cfg_data_en       :out std_logic;    
     trigger_sample_cmd:out std_logic;    
+    cnt_cycle         :out std_logic_vector(31 downto 0);
+    cnt_cycle_ov      :out std_logic;
 ---------------自检命令---------------------------    
     channel_check_en  :out std_logic;
     channel_check0    :out std_logic_vector(35 downto 0);
@@ -118,7 +120,7 @@ signal cnt_trigger:integer range 0 to 2047;
 signal cnt_rx:integer range 0 to 2047;
 signal cnt_tx:integer range 0 to 2047;
 signal cnt_rpt:integer ;
-signal cnt_cycle:integer;
+signal cnt_cycle_i:integer;
 signal s1    :integer range 0 to 3;
 signal s2    :integer range 0 to 7;
 
@@ -357,6 +359,8 @@ signal URS_ms_supply_counter:integer range 0 to 4095;
 
 begin
 ---------------------数据接收-----------------------------------
+cnt_cycle<=conv_std_logic_vector(cnt_cycle_i,32);
+
 s_axis_tready<='1';
 
 process(clkin,rst_n)
@@ -686,7 +690,7 @@ begin
         if usb_rx_buf_vld='1' and usb_rx_buf_type=X"13" then
             trigger_sample_cmd<='1';
         elsif work_mod_i=X"50" then
-            if cnt_cycle=10 then
+            if cnt_cycle_i=10 then
                 trigger_sample_cmd<='1';    ---发送采集命令    
                 up_data_freq_lock<=up_data_freq;
             else
@@ -739,17 +743,20 @@ end process;
 process(clkin,rst_n)
 begin
     if rst_n='0' then
-        cnt_cycle<=1;
+        cnt_cycle_i<=1;
+        cnt_cycle_ov<='0';
         lock_data_en<='0';
     elsif rising_edge(clkin) then            
         if work_mod_i=X"50" then          --自动上传
-            if cnt_cycle>=up_data_freq_lock-1 then
-                cnt_cycle<=0;
+            if cnt_cycle_i>=up_data_freq_lock-1 then
+                cnt_cycle_i<=0;
+                cnt_cycle_ov<='1';
             else
-                cnt_cycle<=cnt_cycle+1;
+                cnt_cycle_i<=cnt_cycle_i+1;
+                cnt_cycle_ov<='0';
             end if;
             
-            if cnt_cycle=up_data_freq_lock-1 then
+            if cnt_cycle_i=up_data_freq_lock-1 then
                 lock_data_en<='1';
             elsif s2=1 then
                 lock_data_en<='0';
@@ -758,7 +765,7 @@ begin
             end if;
 
         else                    ----手动上传
-            cnt_cycle<=1;
+            cnt_cycle_i<=1;
             if ad_data_buf_vld='1' then
                 lock_data_en<='1';
             elsif s2=1 then
@@ -1247,7 +1254,7 @@ begin
             m3_num<=X"00";
         end if;        
                
-        act_dl_num<=X"24"+m1_num+m2_num+m3_num;
+        act_dl_num<=m0_num_t+m1_num+m2_num+m3_num;
         
     end if;
 end process;

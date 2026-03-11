@@ -64,6 +64,13 @@ generic(
 	s_axis_trst	    :in std_logic;					---专门用于产生AD的复位逻辑    
 	s_axis_tnum		:in std_logic_vector(15 downto 0);	--接收与发送总bit数（一次SPI工作过程中总时钟数）
 ----------------------------------------
+--------feature "m0_num=18" code begin---------
+    m0_num          :in std_logic_vector(7 downto 0);
+    m0_num_18_initialized   :std_logic;
+    read_trigger    :in std_logic;
+    read_period     :in std_logic;
+    spi_state_cnt   :in std_logic_vector(15 downto 0);
+--------feature "m0_num=18" code end-----------
 	spi_rd_data		:out std_logic_vector(sdi_num*(rx_data_width+rx_addr_width)-1 downto 0);	
 	spi_rd_vld		:out std_logic;	
 ----------------------------------------
@@ -104,6 +111,14 @@ signal tx_data			:std_logic_vector(tx_data_width-1 downto 0):=(others=>'0');
 signal read_addr		:std_logic_vector(rx_addr_width-1 downto 0):=(others=>'0');
 signal tx_data_num		:std_logic_vector(16-1 downto 0):=(others=>'0');
 
+--------feature "m0_num=18" code begin---------
+signal sdi_d1           :std_logic_vector(sdi_num-1 downto 0);
+signal sdi_d2           :std_logic_vector(sdi_num-1 downto 0);
+type t2 is array(0 to sdi_num-1) of std_logic_vector(31 downto 0);
+signal adc_result_shift_reg :t2;
+signal result_write_trigger :std_logic;
+
+--------feature "m0_num=18" code end-----------
 
 begin
 
@@ -401,7 +416,49 @@ begin
 	end if;
 end process;						
 
+--------feature "m0_num=18" code begin---------
+g1:for i in 0 to sdi_num-1 generate
+begin
+    process(clkin,rst_n)
+    begin
+        if rising_edge(clkin) then
+            sdi_d1(i)<=sdi(i);
+            sdi_d2(i)<=sdi_d1(i);
+        end if;
+    end process;
+    
+    process(clkin,rst_n)
+    begin
+        if rst_n='0' then
+            adc_result_shift_reg(i)<=X"0000_0000";
+        else
+            if rising_edge(clkin) then
+                if read_trigger='1' then
+                    adc_result_shift_reg(i)<=X"FFFF_FFFF";
+                elsif read_period='1' and spi_state_cnt(4 downto 0)="01101" then
+                    adc_result_shift_reg(i)<=adc_result_shift_reg(i)(30 downto 0) & sdi_d2(i);
+                end if;
+            end if;
+        end if;
+    end process;
+end generate;
 
+process(clkin,rst_n)
+begin
+    if rst_n='0' then
+        result_write_trigger<='0';
+    else
+        if rising_edge(clkin) then
+            if spi_state_cnt=X"0007" then
+                result_write_trigger<='1';
+            else
+                result_write_trigger<='0';
+            end if;
+        end if;
+    end if;
+end process;
+
+--------feature "m0_num=18" code end-----------
 
 process(clkin,rst_n)
 begin
@@ -410,18 +467,28 @@ begin
 		spi_rd_data<=(others=>'0');
 	else
 		if rising_edge(clkin) then
-			if rx_data_temp_vld(0)='1' then
-                for i in 0 to sdi_num-1 loop
-                    spi_rd_data((i+1)*(rx_data_width+rx_addr_width)-1 downto (i+0)*(rx_data_width+rx_addr_width))<=rx_data_temp(i);
-                end loop;
-				spi_rd_vld<='1';
-			else
-				spi_rd_vld<='0';
-			end if;
+            if m0_num=X"12" and m0_num_18_initialized='1' then
+                if result_write_trigger='1' then
+                    for i in 0 to sdi_num-1 loop
+                        spi_rd_data((i+1)*(rx_data_width+rx_addr_width)-1 downto (i+0)*(rx_data_width+rx_addr_width))<=X"04"&adc_result_shift_reg(i)(31 downto 2)&"11";
+                    end loop;
+                    spi_rd_vld<='1';
+                else
+                    spi_rd_vld<='0';
+                end if;
+            else
+                if rx_data_temp_vld(0)='1' then
+                    for i in 0 to sdi_num-1 loop
+                        spi_rd_data((i+1)*(rx_data_width+rx_addr_width)-1 downto (i+0)*(rx_data_width+rx_addr_width))<=rx_data_temp(i);
+                    end loop;
+                    spi_rd_vld<='1';
+                else
+                    spi_rd_vld<='0';
+                end if;
+            end if;
 		end if;
 	end if;
 end process;
-
 
 
 
