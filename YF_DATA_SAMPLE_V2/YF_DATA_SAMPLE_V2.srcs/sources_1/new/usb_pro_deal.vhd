@@ -355,7 +355,7 @@ signal commom_sig_i             :std_logic;
 signal usb_repeater_supply_i    :std_logic;
 signal URS_clk_counter:integer range 0 to 65535;
 signal URS_ms_heartbeat_counter:integer range 0 to 4095;
-signal URS_ms_supply_counter:integer range 0 to 4095;
+signal URS_ms_supply_counter:integer range 0 to 1023;
 
 begin
 ---------------------数据接收-----------------------------------
@@ -1281,7 +1281,7 @@ begin
         URS_ms_heartbeat_counter <= 0;
     elsif rising_edge(clkin) then
         if work_mod_i = X"50" and commom_sig_i = '0' then
-            if usb_rx_buf_vld='1' and usb_rx_buf_type=X"30" then
+            if usb_rx_buf_vld='1' then
                 URS_ms_heartbeat_counter <= 0;
             elsif URS_clk_counter = 49999 then
                 if URS_ms_heartbeat_counter < 1000 then
@@ -1301,13 +1301,9 @@ begin
     if rising_edge(clkin) then
         if URS_clk_counter = 49999 then
             if URS_ms_heartbeat_counter = 1000 then
-                if URS_ms_supply_counter = 1000 then
-                    URS_ms_supply_counter <= URS_ms_supply_counter;
-                else
-                    URS_ms_supply_counter <= URS_ms_supply_counter + 1;
-                end if;
+                URS_ms_supply_counter <= URS_ms_supply_counter + 1;
             else
-                URS_ms_supply_counter <= 4095;
+                URS_ms_supply_counter <= 1023;
             end if;
         end if;
     end if;
